@@ -98,6 +98,7 @@ class AppListManager(
         if (layoutManager.spanCount != columnCount) {
             layoutManager.spanCount = columnCount
         }
+        recyclerView.layoutDirection = if (prefs.isRtlRowEnabled()) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         updateAppsCache()
         buildItems()
     }
@@ -853,6 +854,7 @@ class AppListManager(
     private fun configureRecyclerView() {
         layoutManager = GridLayoutManager(context, computeColumnCount())
         recyclerView.layoutManager = layoutManager
+        recyclerView.layoutDirection = if (prefs.isRtlRowEnabled()) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         recyclerView.adapter = adapter
     }
 
@@ -920,22 +922,34 @@ class AppListManager(
     }
 
     private fun bindGroupHeader(holder: GroupHeaderViewHolder, item: ListItem.Header) {
+        val isRtl = prefs.isRtlRowEnabled()
+        holder.itemView.layoutDirection = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        holder.text.layoutDirection = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        holder.text.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+
         val pinned = prefs.isGroupKeepExpanded(item.id)
         val collapsible = prefs.hasCollapsibleGroups() && !pinned
         val isExpanded = pinned || (collapsible && prefs.isGroupExpanded(item.id))
-        val collapseIndicator = if (collapsible) {
+        val indicatorSymbol = if (collapsible) {
             context.getString(
                 if (isExpanded) {
                     BohioR.string.settings_section_collapse_indicator
                 } else {
                     BohioR.string.settings_section_expand_indicator
                 }
-            ) + " "
+            )
         } else {
             ""
         }
 
-        holder.text.text = collapseIndicator + item.title.uppercase()
+        val titleText = item.title.uppercase()
+        holder.text.text = if (indicatorSymbol.isEmpty()) {
+            titleText
+        } else if (isRtl) {
+            "$titleText $indicatorSymbol"
+        } else {
+            "$indicatorSymbol $titleText"
+        }
         ThemeManager.applyTheme(context, holder.text)
         ViewCompat.setAccessibilityHeading(holder.itemView, true)
         holder.itemView.isFocusable = collapsible

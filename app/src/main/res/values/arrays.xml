@@ -55,4 +55,28 @@
         <item>@string/app_offline_desc</item>
         <item>@string/license_gpl3</item>
     </string-array>
+
+    <string-array name="app_font_size_steps">
+        <item>16</item>
+        <item>20</item>
+        <item>24</item>
+        <item>28</item>
+        <item>32</item>
+        <item>36</item>
+        <item>40</item>
+        <item>44</item>
+        <item>48</item>
+    </string-array>
+
+    <string-array name="app_row_spacing_steps">
+        <item>0</item>
+        <item>4</item>
+        <item>8</item>
+        <item>12</item>
+        <item>16</item>
+        <item>20</item>
+        <item>24</item>
+        <item>28</item>
+        <item>32</item>
+    </string-array>
 </resources>

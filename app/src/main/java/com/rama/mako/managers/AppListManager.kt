@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.text.format.Formatter
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.View.generateViewId
@@ -984,6 +985,20 @@ class AppListManager(
         val showIcons = prefs.hasIconsVisible()
         renderAppInfo(view, app)
         view.isFocusable = true
+
+        val isRtl = prefs.isRtlRowEnabled()
+        view.layoutDirection = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+
+        val fontSize = prefs.getAppFontSize()
+        holder.label.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSize.toFloat())
+
+        val rowSpacingPx = spToPx(context, prefs.getAppRowSpacing().toFloat())
+        holder.label.setPaddingRelative(
+            holder.label.paddingStart,
+            rowSpacingPx,
+            holder.label.paddingEnd,
+            rowSpacingPx
+        )
 
         val key = getSelectionKey(app)
         val isSelected = key in selectedApps

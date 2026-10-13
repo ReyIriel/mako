@@ -40,6 +40,7 @@ class PrefsManager private constructor(context: Context) : BohioPrefsManager(con
         const val GROUPS_COLLAPSIBLE = "groups:collapsible"
         const val GROUPS_COLLAPSE_ON_HOME_FOCUS = "groups:collapse_on_home_focus"
         const val GROUPS_AUTO_COLLAPSE = "auto_collapse_groups"
+        const val GROUPS_HORIZONTAL_SLIDER = "groups:horizontal_slider"
 
         @Deprecated("Migrated into DATE_FORMAT (see MIGRATION_DATE_FORMAT_RADIO)")
         const val DATE_VISIBLE = "date:visible"
@@ -194,6 +195,7 @@ class PrefsManager private constructor(context: Context) : BohioPrefsManager(con
         editor.putBoolean(FileKeys.GROUPS_HEADERS, true)
         editor.putBoolean(FileKeys.GROUPS_COLLAPSIBLE, true)
         editor.putBoolean(FileKeys.GROUPS_COLLAPSE_ON_HOME_FOCUS, false)
+        editor.putBoolean(FileKeys.GROUPS_HORIZONTAL_SLIDER, false)
         editor.putBoolean(FileKeys.SECURITY_KEYPAD_RANDOMIZED, true)
         editor.putBoolean(FileKeys.SECURITY_KEYPAD_VISIBLE, false)
 
@@ -509,6 +511,12 @@ class PrefsManager private constructor(context: Context) : BohioPrefsManager(con
 
     fun shouldCollapseGroupsOnHomeFocus(): Boolean =
         prefs.getBoolean(FileKeys.GROUPS_COLLAPSE_ON_HOME_FOCUS, false)
+
+    fun isGroupsHorizontalSliderEnabled(): Boolean =
+        prefs.getBoolean(FileKeys.GROUPS_HORIZONTAL_SLIDER, false)
+
+    fun setGroupsHorizontalSliderEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean(FileKeys.GROUPS_HORIZONTAL_SLIDER, enabled).apply()
 
     fun getClockFormat(): String =
         prefs.getString(FileKeys.CLOCK_FORMAT, "") ?: ""

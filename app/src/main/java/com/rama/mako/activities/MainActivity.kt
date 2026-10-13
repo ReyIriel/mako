@@ -57,6 +57,8 @@ class MainActivity : CsActivity() {
     private lateinit var searchIcon: FrameLayout
     private lateinit var clearBtn: FrameLayout
     private var isSearchBarAlwaysVisible = false
+    private val isMergedSearchGroupBar: Boolean
+        get() = prefs.isSearchVisible() && prefs.isSearchBarAlwaysVisible() && prefs.isGroupsHorizontalSliderEnabled()
 
     private var isSearchExpanded = false
     private var isProgrammaticSearchUpdate = false
@@ -223,7 +225,12 @@ class MainActivity : CsActivity() {
             override fun handleOnBackPressed() {
                 if (appListManager.handleBackPress()) return
 
-                if (isSearchBarAlwaysVisible) {
+                if (isMergedSearchGroupBar && isSearchExpanded) {
+                    collapseSearch()
+                    return
+                }
+
+                if (!isMergedSearchGroupBar && isSearchBarAlwaysVisible) {
                     if (searchField.hasFocus()) {
                         searchField.clearFocus()
                         return
@@ -257,6 +264,12 @@ class MainActivity : CsActivity() {
             } else {
                 expandSearch()
             }
+        }
+
+        val mergedSearchBtn = findViewById<View>(R.id.merged_search_icon_btn)
+        mergedSearchBtn?.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            expandSearch()
         }
 
         searchField.addTextChangedListener(object : android.text.TextWatcher {
@@ -294,9 +307,13 @@ class MainActivity : CsActivity() {
     private fun expandSearch() {
         isSearchExpanded = true
 
+        if (isMergedSearchGroupBar) {
+            findViewById<View>(R.id.groups_horizontal_bar)?.visibility = View.GONE
+            findViewById<View>(R.id.searchbar)?.visibility = View.VISIBLE
+        }
+
         searchField.visibility = View.VISIBLE
-        if (!isSearchBarAlwaysVisible)
-            searchField.requestFocus()
+        searchField.requestFocus()
 
         val scaleX = ObjectAnimator.ofFloat(searchField, "scaleX", 0.8f, 1f)
         val scaleY = ObjectAnimator.ofFloat(searchField, "scaleY", 0.8f, 1f)
@@ -320,6 +337,11 @@ class MainActivity : CsActivity() {
         searchField.visibility = View.GONE
         clearBtn.visibility = View.GONE
         searchField.clearFocus()
+
+        if (isMergedSearchGroupBar) {
+            findViewById<View>(R.id.searchbar)?.visibility = View.GONE
+            findViewById<View>(R.id.groups_horizontal_bar)?.visibility = View.VISIBLE
+        }
 
         if (clearQuery) {
             currentSearchQuery = ""
@@ -357,9 +379,21 @@ class MainActivity : CsActivity() {
 
         schedulePostResumeRefresh(skipAppListRefresh = groupsWereCollapsed)
 
-        if (isSearchBarAlwaysVisible) {
+        if (isMergedSearchGroupBar) {
+            if (isSearchExpanded) {
+                collapseSearch(clearQuery = true, hideKeyboard = true)
+            }
+        } else if (isSearchBarAlwaysVisible) {
             expandSearch()
         } else if (isSearchExpanded) {
+            collapseSearch()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (isSearchExpanded) {
             collapseSearch()
         }
     }
@@ -397,10 +431,27 @@ class MainActivity : CsActivity() {
             if (prefs.isDateVisible()) View.VISIBLE else View.GONE
         homeHeader.findViewById<View>(R.id.battery_row).visibility =
             if (prefs.isBatteryVisible()) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.searchbar).visibility =
-            if (searchVisible) View.VISIBLE else View.GONE
-        searchIcon.visibility =
-            if (searchVisible && !isSearchBarAlwaysVisible) View.VISIBLE else View.GONE
+
+        val searchbar = findViewById<View>(R.id.searchbar)
+        val groupsBar = findViewById<View>(R.id.groups_horizontal_bar)
+        val mergedContainer = findViewById<View>(R.id.merged_search_icon_container)
+
+        if (isMergedSearchGroupBar) {
+            searchIcon.visibility = View.GONE
+            mergedContainer?.visibility = View.VISIBLE
+            if (isSearchExpanded) {
+                searchbar?.visibility = View.VISIBLE
+                groupsBar?.visibility = View.GONE
+            } else {
+                searchbar?.visibility = View.GONE
+                groupsBar?.visibility = View.VISIBLE
+            }
+        } else {
+            mergedContainer?.visibility = View.GONE
+            searchbar?.visibility = if (searchVisible) View.VISIBLE else View.GONE
+            searchIcon.visibility =
+                if (searchVisible && !isSearchBarAlwaysVisible) View.VISIBLE else View.GONE
+        }
     }
 
     private fun resolveConfiguredApp(storedValue: String): AppsProvider.AppEntry? {

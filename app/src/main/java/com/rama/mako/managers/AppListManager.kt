@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import android.text.format.Formatter
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.View.generateViewId
@@ -75,6 +76,7 @@ class AppListManager(
     private var renameButton: FrameLayout? = null
     private var appSettingsButton: FrameLayout? = null
     private var appSettingsIcon: ImageView? = null
+    private var selectedHorizontalGroupId: String? = null
 
     fun setup() {
         configureRecyclerView()
@@ -135,39 +137,173 @@ class AppListManager(
 
     private fun buildItems() {
         val allApps = allAppsCache
-
-        // Map apps by groupId (NOT label)
         val groupedMap = allApps.groupBy(prefs::getAppGroupId)
 
         items.clear()
 
-        getAllGroupIds().forEach { groupId ->
+        val isHorizontalSlider = prefs.isGroupsHorizontalSliderEnabled()
 
-            val apps = groupedMap[groupId] ?: return@forEach
+        val visibleGroupIds = getAllGroupIds().filter { prefs.isGroupVisible(it) }
 
-            val isVisible = prefs.isGroupVisible(groupId)
-            if (!isVisible) return@forEach
-
-            val label = prefs.getGroupLabel(groupId)
-
-            // Header uses label only for display
-            if (prefs.hasGroupHeaders()) {
-                items.add(
-                    ListItem.Header(
-                        id = groupId,
-                        title = label
-                    )
-                )
+        if (isHorizontalSlider) {
+            if (selectedHorizontalGroupId == null || selectedHorizontalGroupId !in visibleGroupIds) {
+                selectedHorizontalGroupId = visibleGroupIds.firstOrNull() ?: PrefsManager.SystemIds.UNGROUPED
             }
 
-            val isExpanded = prefs.isGroupKeepExpanded(groupId) || prefs.isGroupExpanded(groupId)
-            if (!isExpanded) return@forEach
+            val currentGroupId = selectedHorizontalGroupId
+            val apps = groupedMap[currentGroupId] ?: emptyList()
 
             apps.sortedBy { getSearchableName(it) }
                 .forEach { items.add(ListItem.App(it)) }
+
+            renderHorizontalGroupBar(visibleGroupIds)
+        } else {
+            hideHorizontalGroupBar()
+
+            visibleGroupIds.forEach { groupId ->
+                val apps = groupedMap[groupId] ?: return@forEach
+
+                val label = prefs.getGroupLabel(groupId)
+
+                if (prefs.hasGroupHeaders()) {
+                    items.add(
+                        ListItem.Header(
+                            id = groupId,
+                            title = label
+                        )
+                    )
+                }
+
+                val isExpanded = prefs.isGroupKeepExpanded(groupId) || prefs.isGroupExpanded(groupId)
+                if (!isExpanded) return@forEach
+
+                apps.sortedBy { getSearchableName(it) }
+                    .forEach { items.add(ListItem.App(it)) }
+            }
         }
 
         adapter.updateItems(arrangeItemsForColumns(items))
+        adjustTopPaddingForBottomAnchor()
+    }
+
+    private fun adjustTopPaddingForBottomAnchor() {
+        if (!prefs.isGroupsHorizontalSliderEnabled()) {
+            recyclerView.setPadding(0, 0, 0, 0)
+            return
+        }
+
+        recyclerView.clipToPadding = false
+        recyclerView.post {
+            val fontSizeSp = prefs.getAppFontSize().toFloat()
+            val rowSpacingSp = prefs.getAppRowSpacing().toFloat()
+            val fontPx = spToPx(context, fontSizeSp)
+            val spacingPx = spToPx(context, rowSpacingSp)
+            val estimatedRowHeight = maxOf(fontPx + (2 * spacingPx), spToPx(context, 32f))
+
+            val columnCount = computeColumnCount()
+            val rowCount = ceil(items.size.toFloat() / columnCount).toInt()
+            val totalItemsHeight = rowCount * estimatedRowHeight
+
+            val availableHeight = recyclerView.height
+            if (availableHeight > totalItemsHeight && totalItemsHeight > 0) {
+                val topPadding = availableHeight - totalItemsHeight
+                recyclerView.setPadding(0, topPadding, 0, 0)
+            } else {
+                recyclerView.setPadding(0, 0, 0, 0)
+            }
+        }
+    }
+
+    private fun hideHorizontalGroupBar() {
+        val root = (context as? android.app.Activity)?.findViewById<View>(R.id.root)
+            ?: recyclerView.rootView
+            ?: return
+        val horizontalBar = root.findViewById<View>(R.id.groups_horizontal_bar)
+        horizontalBar?.visibility = View.GONE
+    }
+
+    private fun renderHorizontalGroupBar(visibleGroupIds: List<String>) {
+        val root = (context as? android.app.Activity)?.findViewById<View>(R.id.root)
+            ?: recyclerView.rootView
+            ?: return
+        val horizontalBar = root.findViewById<View>(R.id.groups_horizontal_bar) ?: return
+        val horizontalScroll = root.findViewById<View>(R.id.groups_horizontal_scroll) ?: horizontalBar
+        val container = root.findViewById<LinearLayout>(R.id.groups_horizontal_container) ?: return
+
+        val isMergedSearchGroupBar = prefs.isSearchVisible() && prefs.isSearchBarAlwaysVisible() && prefs.isGroupsHorizontalSliderEnabled()
+        val searchbar = root.findViewById<View>(R.id.searchbar)
+
+        if (isMergedSearchGroupBar && searchbar?.visibility == View.VISIBLE) {
+            horizontalBar.visibility = View.GONE
+            return
+        }
+
+        horizontalBar.visibility = View.VISIBLE
+        container.removeAllViews()
+
+        // Enforce LTR on group buttons container so first group always starts on the left side
+        horizontalScroll.layoutDirection = View.LAYOUT_DIRECTION_LTR
+        container.layoutDirection = View.LAYOUT_DIRECTION_LTR
+
+        val palette = ThemeManager.paletteFor(prefs.getTheme(), context)
+
+        val mergedContainer = root.findViewById<View>(R.id.merged_search_icon_container)
+        val mergedSeparator = root.findViewById<View>(R.id.merged_search_separator)
+        val mergedSearchIcon = root.findViewById<ImageView>(R.id.merged_search_icon)
+
+        if (isMergedSearchGroupBar) {
+            mergedContainer?.visibility = View.VISIBLE
+            mergedSeparator?.setBackgroundColor(palette.bg_2)
+            mergedSearchIcon?.setColorFilter(palette.icon)
+        } else {
+            mergedContainer?.visibility = View.GONE
+        }
+
+        visibleGroupIds.forEachIndexed { index, groupId ->
+            val isSelected = groupId == selectedHorizontalGroupId
+            val label = prefs.getGroupLabel(groupId)
+
+            val button = TextView(context).apply {
+                text = label
+                textSize = 16f
+                setPadding(
+                    spToPx(context, 16f),
+                    spToPx(context, 8f),
+                    spToPx(context, 16f),
+                    spToPx(context, 8f)
+                )
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+
+                if (isSelected) {
+                    setTextColor(palette.button_1_selected)
+                    setBackgroundColor(palette.button_1)
+                } else {
+                    setTextColor(palette.foreground)
+                    setBackgroundColor(palette.bg_2)
+                }
+
+                val params = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    if (index < visibleGroupIds.lastIndex) {
+                        marginEnd = spToPx(context, 8f)
+                    }
+                }
+                layoutParams = params
+
+                setOnClickListener {
+                    if (selectedHorizontalGroupId != groupId) {
+                        selectedHorizontalGroupId = groupId
+                        refresh()
+                    }
+                }
+            }
+
+            container.addView(button)
+        }
     }
 
     private fun getAppCacheKey(app: AppsProvider.AppEntry): String =
@@ -339,6 +475,9 @@ class AppListManager(
             buildItems()
             return
         }
+
+        hideHorizontalGroupBar()
+        recyclerView.setPadding(0, 0, 0, 0)
 
         val filteredItems = mutableListOf<ListItem>()
         val matchedGroups = mutableListOf<GroupMatch>()
